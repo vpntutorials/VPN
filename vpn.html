@@ -1,0 +1,116 @@
+<html>
+<title>Use your free DigitalOcean credit offered by GitHub to create a secure VPN server</title>
+<body>
+<h2>Use your free DigitalOcean credit offered by GitHub to create a secure VPN server</h2>
+<br>
+<h2>Legal warning</h2> 
+<p>Using a private secure VPN connection allows you to access the Internet securely and encrypted, prevent from eavesdropping on public networks.</p>
+<p><b>This tutorial is only intended to help you encrypt your traffic when browsing on a public insecure network.</b></p>
+<p>However, connections will now appear to have been initiated from your server. <b>If you conduct illegal activities, such as P2P distribution of copyright files, or sending unsolicited e-mail messages, your server provider may receive complaints. The complaints will be forwarded to you, and may cause consequences. Some other illegal activities may warrant investigations from law enforcements.</b> Please make sure that you only use it for legal purposes (encrypting your traffic), and proceed at your own risk.</p>
+<br>
+
+<h2>Redeem promotion credit</h2> 
+<p>GitHub offers an Education Pack for students from HE institutions.<br>
+Visit <a href='https://education.github.com/'>https://education.github.com/</a><br>
+Click "Get the Pack"<br>
+Click "Get your Pack"<br><br>
+
+If you already have a GitHub account, log in. Otherwise, register one in another tab, and return to here to login.<br>
+Click "Yes, I'm a student".<br>
+Fill in your information.<br>
+If your account is not registered with (or connected with) a .ac.uk or .edu email address, you need to use "add and verify it" to verify your education email address.<br>
+After that, choose your .ac.uk or .edu email address to register.<br><br>
+
+After finished registration, go back to <a href='https://education.github.com/'>https://education.github.com/</a>, click "Get your Pack"<br>
+<img src="credit.png"><br>
+You can request your DigitalOcean promo code from here.<br>
+Go to <a href='https://www.digitalocean.com/'>https://www.digitalocean.com/</a>, register an account. You don't have to use your education email address.<br>
+Go to "Billing" -> "Manage Payments".<br><br>
+You need to either authorise a credit / debit card (note: you are billed in USD, check with your bank for foreign currency fee if you want to use your card),<br> or use Paypal to make a one-time payment of 5 USD. Then you will be able to use your promotion credit.<br>
+After the payment it done, enter the promo code you obtained earlier.<br><br>
+Now you have the credit! Use the big "Create" button.<br>
+Give your VM a hostname, select the $5/month plan. You should be able to use it for 20 months.<br>
+You can use London location as it's the closest, but other locations will also do, as you may prefer other legislations.<br>
+Choose to get IPv6 and private networking. They are not useful in this tutorial, but may be useful later should you wish to get more out of your VM.<br>
+You can find the launched VM at "Droplets" menu. Unless you opted to use a SSH key authentication, the root password will be sent to your account email address.</p>
+
+<h2>Set up your server</h2> 
+
+<p>Now the registration is done. Copy down the IP address of your new VM, as well as the root password from the email.<br>
+We now need to SSH access your VM. <br><br>
+If you are using Windows, you need a SSH client, such as <a href='http://www.chiark.greenend.org.uk/~sgtatham/putty/download.html'>Putty</a>.<br>
+If you are using Linux, OS X, BSD or any other Unix-like, you already have a nice Terminal on your environment, find it.<br>
+Windows connect: Server address is the IP address of your VM, port by default is 22, password is your root password.<br>
+Anything else: <i>ssh root@IP-OF-YOUR-VM</i></p>
+<br>
+Now you are in the shell of your VM! 
+<p>To install a IPSec VPN server on our Ubuntu 14.04, follow the tutorial below:</p>
+<p>Cisco IPSec (IKEv1) compatible VPN works on most devices, easy to config on OS X, iOS and Android, but needs a client like <a href='https://www.shrew.net/download/vpn'>Shrew VPN Client</a> (Standard Version free) on Windows.</p>
+<br>
+First thing first, secure your SSH access.<br>
+<pre>
+	passwd root
+</pre>
+And change the root password to a long and complicated string. At least 20 in length, with a mix of digits, upper and lower case letters, and symbols.<br>
+You can change the port of SSH shell in /etc/ssh/sshd_config, and also turn off password authentication if your have had your own SSH public key entered into /root/.ssh/authorized_keys.<br>
+
+Install the required packages for our installation.<br>
+<pre>
+	apt-get install vim ipsec-tools racoon -y
+</pre>
+When prompted, select "direct" mode for racoon.<br>
+<br>
+Now we can configure racoon.<br>
+First, make a backup of the default racoon config.<br>
+<pre>
+	cd /etc/racoon/
+	mv racoon.conf racoon.conf.old
+	vim racoon.conf
+</pre>
+I have prepared a premade config (<a href='http://pastebin.com/9FdYi3iQ'>http://pastebin.com/9FdYi3iQ</a>). Change "<i>CHANGE-THIS-TO-YOUR-SERVER-IP</i>" to the IP address of your server, and change the DNS server if you need to.<br>
+If you don't know how to operate vim, use arrow keys to point to the text you want to change, use "i" to enter edit mode. Delete and replace the text. After you have finished, use "Esc" to exit edit mode, and then ":wq" to save and exit vim.<br>
+<br>
+Now, create a pre-shared key.<br>
+<pre>
+	vim psk.txt
+</pre>
+Use "dd" repeatedly to remove everything already in there, and "i", add a line like the following:<br><br>
+<i>vpngroup ChangeThisPreSharedKey!</i><br><br>
+The first part is the group name, change it to anything you like (wihout spaces...) and remember it.<br>
+The second part is the pre shared key, change it to another key which is complicated and long, but remember it.<br>
+After you have finished, again use "Esc" + ":wq" to save and quit.<br>
+<br>
+<p>Now, add a user for vpn connection. We have used system authentication earlier in the config, to make things simpler. Racoon supports other authentication methods, and you can explore them later.</p>
+<pre>
+	useradd -s /sbin/nologin vpnuser
+	passwd vpnuser
+</pre>
+And set a password for the user. You can change "vpnuser" to another username you like. /sbin/nologin prevents it from logging into Linux shell and see your files.<br>
+
+We need to tell the system allow IPv4 package forwarding.<br>
+<pre>
+	vim /etc/sysctl.conf
+	#Remove the "#" in front of "net.ipv4.ip_forward=1"
+	sysctl -p
+	/sbin/iptables --table nat --append POSTROUTING --jump MASQUERADE
+	vim /etc/rc.local
+	#add the line starting with "/sbin/iptables" before the "exit 0", so the iptables command is ran at startup
+</pre>
+<br>
+We are all set. Now, restart racoon.<br>
+<pre>
+	service racoon restart
+</pre>
+<br><br>
+Use one of your devices to test if VPN is working now.<br><br>
+<b>Information you will need to configure your client:</b><br>
+<b>Server Address</b>: your VM's IP address<br>
+<b>Account Name</b>: the username you just added for vpn connection<br>
+<b>Password</b>: the password you set for that user<br>
+<b>Authentication, Shared Secret</b>: the pre-shared key you put into psk.txt.<br>
+<b>Group Name</b>: the group name you just set in psk.txt.<br>
+<b>Use Certificate</b>: No.<br>
+<br><br>
+To add a Cisco IPSec VPN connection, it's in Settings - VPN for iOS; Network Settings for Android; System Preferences - Network - "+" for Mac OS X; a VPN client like Shrew VPN Sclient for Windows. If you use Linux or other Unix-like, you may be able to figure this out by yourself...<br>
+</body>
+</html>
